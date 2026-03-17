@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Class Analytics — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    /* ── KPI cards ─────────────────────────────────────────── */
+    .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px; }
+    .kpi {
+      border-radius:var(--radius-xl);
+      padding:22px 22px 18px;
+      position:relative; overflow:hidden;
+      box-shadow:var(--shadow);
+    }
+    .kpi-submissions { background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%); color:#fff; }
+    .kpi-students    { background:linear-gradient(135deg,#0891b2 0%,#06b6d4 100%); color:#fff; }
+    .kpi-miscons     { background:linear-gradient(135deg,#dc2626 0%,#f97316 100%); color:#fff; }
+    .kpi-lbl { font-size:.68rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; opacity:.75; margin-bottom:8px; }
+    .kpi-val { font-size:2.4rem; font-weight:700; line-height:1; margin-bottom:4px; }
+    .kpi-sub { font-size:.78rem; opacity:.65; }
+    .kpi-glow {
+      position:absolute; width:120px; height:120px; border-radius:50%;
+      background:rgba(255,255,255,.12);
+      bottom:-30px; right:-20px;
+    }
+
+    /* ── Weakness banner ───────────────────────────────────── */
+    .weakness-banner {
+      background:linear-gradient(135deg,#1e1c4a 0%,#312e81 100%);
+      border:1px solid rgba(167,139,250,.2);
+      border-radius:var(--radius-xl);
+      padding:20px 24px;
+      display:flex; align-items:center; gap:18px;
+      margin-bottom:22px;
+      box-shadow:0 4px 24px rgba(79,70,229,.25);
+    }
+    .weakness-icon {
+      width:50px; height:50px; border-radius:14px;
+      background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3);
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.4rem; flex-shrink:0;
+    }
+    .weakness-label { font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:rgba(167,139,250,.7); margin-bottom:3px; }
+    .weakness-concept { font-family:var(--font-display); font-size:1.25rem; color:#fff; margin-bottom:2px; }
+    .weakness-desc { font-size:.8rem; color:rgba(255,255,255,.5); }
+    .weakness-cta {
+      margin-left:auto; flex-shrink:0;
+      background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+      color:#fff; border-radius:var(--radius-sm); padding:0 16px;
+      height:36px; font-family:var(--font); font-size:.82rem; font-weight:600;
+      cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+      text-decoration:none; transition:background .15s; white-space:nowrap;
+    }
+    .weakness-cta:hover { background:rgba(255,255,255,.18); }
+
+    /* ── Charts ────────────────────────────────────────────── */
+    .charts-row { display:grid; grid-template-columns:340px 1fr; gap:16px; margin-bottom:18px; }
+    .chart-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-xl); box-shadow:var(--shadow-sm); overflow:hidden; }
+    .chart-hdr { padding:16px 20px 12px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; justify-content:space-between; }
+    .chart-ttl { font-size:.9rem; font-weight:700; color:var(--text); }
+    .chart-sub { font-size:.72rem; color:var(--muted); margin-top:2px; }
+    .chart-body { padding:18px 20px; }
+
+    /* ── Concept chips legend ──────────────────────────────── */
+    .legend-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .legend-chip {
+      display:flex; align-items:center; gap:5px;
+      padding:3px 10px; border-radius:99px;
+      font-size:.72rem; font-weight:600;
+      border:1px solid transparent;
+    }
+    .legend-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+    /* ── Misconception list ────────────────────────────────── */
+    .m-list { display:flex; flex-direction:column; gap:7px; }
+    .m-row {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px;
+      border-radius:var(--radius);
+      border:1px solid var(--border);
+      background:var(--surface);
+      transition:border-color .15s;
+    }
+    .m-row:hover { border-color:var(--accent); }
+    .m-rank {
+      width:22px; height:22px; border-radius:50%;
+      font-size:.68rem; font-weight:700;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .m-rank-1 { background:#fee2e2; color:#991b1b; }
+    .m-rank-n { background:var(--accent-soft); color:var(--accent); }
+    .m-bar-bg { width:72px; height:5px; background:var(--border); border-radius:99px; overflow:hidden; flex-shrink:0; }
+    .m-bar-fill { height:100%; border-radius:99px; }
+    .m-count { font-size:.78rem; font-weight:700; color:var(--text); min-width:22px; text-align:right; }
+
+    /* ── Reteach ───────────────────────────────────────────── */
+    .reteach-list { display:flex; flex-direction:column; gap:8px; }
+    .reteach-item {
+      display:flex; gap:12px; padding:12px 14px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); border-left:3px solid var(--accent);
+    }
+    .reteach-num {
+      width:22px; height:22px; border-radius:50%;
+      background:var(--accent); color:#fff;
+      font-size:.68rem; font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; margin-top:1px;
+    }
+    .reteach-txt { font-size:.85rem; line-height:1.6; color:var(--text); }
+
+    /* ── Bottom grid ───────────────────────────────────────── */
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px; }
+
+    /* ── Student table ─────────────────────────────────────── */
+    .correct-pct-bar {
+      display:flex; align-items:center; gap:8px;
+    }
+    .pct-track { flex:1; height:6px; background:var(--border); border-radius:99px; overflow:hidden; min-width:60px; }
+    .pct-fill { height:100%; border-radius:99px; background:var(--success); }
+
+    /* ── Summary card ──────────────────────────────────────── */
+    .summary-card {
+      background:linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 100%);
+      border:1px solid #bae6fd;
+      border-radius:var(--radius-xl);
+      padding:20px 24px;
+      margin-bottom:8px;
+    }
+    .summary-label { font-size:.68rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#0369a1; margin-bottom:8px; }
+    .summary-text { font-size:.9rem; line-height:1.75; color:#0c4a6e; }
+
+    @keyframes fade-up { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:none;} }
+    .fade-up { animation:fade-up .25s cubic-bezier(.4,0,.2,1) both; }
+    .fade-up-1 { animation-delay:.05s; }
+    .fade-up-2 { animation-delay:.1s; }
+    .fade-up-3 { animation-delay:.15s; }
+    .fade-up-4 { animation-delay:.2s; }
+  </style>
+</head>
+<body>
+  <div class="app-layout" id="root"></div>
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, getSubmissionsForTeacher, getTeacherStudents, getTeacherQuestions }
+      from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'teacher') window.location.href = 'auth-login.html?role=teacher';
+
+    // Color system for concepts — vivid, distinct
+    const CONCEPT_COLORS = {
+      loops:          { bg:'#4f46e5', light:'#ede9fe', text:'#4338ca', bar:'rgba(79,70,229,0.85)'  },
+      conditionals:   { bg:'#d97706', light:'#fef3c7', text:'#92400e', bar:'rgba(217,119,6,0.85)'  },
+      variables:      { bg:'#059669', light:'#d1fae5', text:'#065f46', bar:'rgba(5,150,105,0.85)'  },
+      lists:          { bg:'#dc2626', light:'#fee2e2', text:'#991b1b', bar:'rgba(220,38,38,0.85)'  },
+      derivatives:    { bg:'#7c3aed', light:'#ede9fe', text:'#5b21b6', bar:'rgba(124,58,237,0.85)' },
+      integration:    { bg:'#0891b2', light:'#cffafe', text:'#155e75', bar:'rgba(8,145,178,0.85)'  },
+      default:        { bg:'#6366f1', light:'#e0e7ff', text:'#4338ca', bar:'rgba(99,102,241,0.85)' },
+    };
+    function getCC(concept) {
+      return CONCEPT_COLORS[(concept||'').toLowerCase()] || CONCEPT_COLORS.default;
+    }
+    function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    async function render() {
+      document.getElementById('root').innerHTML = buildSidebar('analytics') + `
+        <div class="main">
+          <div class="topbar">
+            <div><div class="topbar-title">Class Analytics</div><div class="topbar-sub">Live insights from Firestore</div></div>
+            <button class="btn btn-ghost" onclick="render()">↻ Refresh</button>
+          </div>
+          <div class="page-content" id="pc">
+            <div style="display:flex;align-items:center;gap:10px;padding:60px 0;justify-content:center;color:var(--muted);">
+              <div class="spinner spinner-dark" style="width:26px;height:26px;"></div>
+              <span style="font-size:.875rem;">Loading analytics…</span>
+            </div>
+          </div>
+        </div>`;
+      initSidebarProfile();
+
+      const [submissions, students, questions] = await Promise.all([
+        getSubmissionsForTeacher(user.uid),
+        getTeacherStudents(user.uid),
+        getTeacherQuestions(user.uid)
+      ]);
+
+      if (submissions.length === 0) {
+        document.getElementById('pc').innerHTML = `
+          <div class="card"><div class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <div class="empty-state-title">No data yet</div>
+            <div class="empty-state-sub">Analytics appear once students start submitting answers.</div>
+            <a href="teacher-create-question.html" class="btn btn-primary" style="margin-top:16px;">Create a Question →</a>
+          </div></div>`;
+        return;
+      }
+
+      // ── Derive data ────────────────────────────────────────
+      const byC = {}, byCS = {};
+      submissions.forEach(s => {
+        const q = questions.find(q => q.id === s.questionId);
+        const c = (q?.concept || s.concept || 'other').toLowerCase();
+        byC[c] = (byC[c] || 0) + 1;
+        if (!byCS[c]) byCS[c] = new Set();
+        byCS[c].add(s.studentUid);
+      });
+      const concepts     = Object.keys(byC).sort((a,b) => byC[b]-byC[a]);
+      const totalErrors  = Object.values(byC).reduce((a,b)=>a+b,0);
+      const worstC       = concepts[0] || null;
+
+      // Misconception map
+      const miscMap = {};
+      submissions.forEach(s => {
+        if (s.misconception) {
+          if (!miscMap[s.misconception]) miscMap[s.misconception] = { misconception:s.misconception, concept:s.concept||'—', count:0, students:new Set() };
+          miscMap[s.misconception].count++;
+          miscMap[s.misconception].students.add(s.studentUid);
+        }
+      });
+      const topMiscons = Object.values(miscMap).sort((a,b)=>b.count-a.count);
+
+      // Generate AI insights (best effort)
+      let reteach = [], summary = '';
+      try {
+        const insights = await generateClassInsights(
+          submissions.map(s=>({studentName:s.studentName||s.studentUid,questionPrompt:s.questionPrompt||'—',isCorrect:s.isCorrect,misconception:s.misconception,analysis:s.analysis})),
+          questions
+        );
+        reteach  = insights?.suggestedReteachTopics || [];
+        summary  = insights?.teacherSummary         || '';
+        if (insights?.weakestConcept) localStorage.setItem('weakestConcept_'+user.uid, insights.weakestConcept);
+      } catch(e) { /* optional */ }
+
+      if (worstC) localStorage.setItem('weakestConcept_'+user.uid, worstC);
+
+      const worstCC = getCC(worstC);
+
+      document.getElementById('pc').innerHTML = `
+
+        <!-- Weakness banner -->
+        ${worstC ? `
+        <div class="weakness-banner fade-up">
+          <div class="weakness-icon">⚠️</div>
+          <div>
+            <div class="weakness-label">Class Weak Spot</div>
+            <div class="weakness-concept">${cap(worstC)}</div>
+            <div class="weakness-desc">${byC[worstC]} error${byC[worstC]!==1?'s':''} · ${byCS[worstC]?.size||0} student${(byCS[worstC]?.size||0)!==1?'s':''} affected</div>
+          </div>
+          <a href="teacher-generate-question.html" class="weakness-cta">✨ Generate ${cap(worstC)} Questions</a>
+        </div>` : ''}
+
+        <!-- KPI cards -->
+        <div class="kpi-grid fade-up fade-up-1">
+          <div class="kpi kpi-submissions">
+            <div class="kpi-glow"></div>
+            <div class="kpi-lbl">Total Submissions</div>
+            <div class="kpi-val">${submissions.length}</div>
+            <div class="kpi-sub">Answers received</div>
+          </div>
+          <div class="kpi kpi-students">
+            <div class="kpi-glow"></div>
+            <div class="kpi-lbl">Students Enrolled</div>
+            <div class="kpi-val">${students.length}</div>
+            <div class="kpi-sub">In this class</div>
+          </div>
+          <div class="kpi kpi-miscons">
+            <div class="kpi-glow"></div>
+            <div class="kpi-lbl">Misconception Types</div>
+            <div class="kpi-val">${topMiscons.length}</div>
+            <div class="kpi-sub">Distinct patterns found</div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="charts-row fade-up fade-up-2">
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div><div class="chart-ttl">Error Distribution</div><div class="chart-sub">Share of errors per concept</div></div>
+            </div>
+            <div class="chart-body">
+              <div class="legend-chips">
+                ${concepts.map(c => {
+                  const cc = getCC(c);
+                  return `<div class="legend-chip" style="background:${cc.light};border-color:${cc.bg}20;color:${cc.text};">
+                    <div class="legend-dot" style="background:${cc.bg};"></div>
+                    ${cap(c)} ${Math.round(byC[c]/totalErrors*100)}%
+                  </div>`;
+                }).join('')}
+              </div>
+              <div style="position:relative;height:200px;"><canvas id="pieChart"></canvas></div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div><div class="chart-ttl">Error Count by Concept</div><div class="chart-sub">Number of misconception instances</div></div>
+            </div>
+            <div class="chart-body"><div style="position:relative;height:220px;"><canvas id="barChart"></canvas></div></div>
+          </div>
+        </div>
+
+        <!-- Misconceptions + Reteach -->
+        <div class="two-col fade-up fade-up-3">
+          <div class="chart-card">
+            <div class="chart-hdr"><div class="chart-ttl">Top Misconceptions</div></div>
+            <div class="chart-body" style="padding-top:14px;">
+              ${topMiscons.length === 0
+                ? '<div class="text-muted text-sm">No misconceptions recorded yet.</div>'
+                : `<div class="m-list">
+                    ${topMiscons.map((m,i) => {
+                      const pct = Math.round(m.count / (topMiscons[0]?.count||1) * 100);
+                      const cc  = getCC(m.concept);
+                      return `<div class="m-row">
+                        <div class="m-rank ${i===0?'m-rank-1':'m-rank-n'}">${i+1}</div>
+                        <div style="flex:1;min-width:0;">
+                          <div style="font-size:.82rem;font-weight:500;">${esc(m.misconception)}</div>
+                          <div style="font-size:.7rem;margin-top:2px;">
+                            <span style="background:${cc.light};color:${cc.text};padding:1px 7px;border-radius:99px;font-weight:600;">${cap(m.concept)}</span>
+                          </div>
+                        </div>
+                        <div class="m-bar-bg"><div class="m-bar-fill" style="width:${pct}%;background:${i===0?'#ef4444':cc.bg};"></div></div>
+                        <div class="m-count">${m.count}</div>
+                      </div>`;
+                    }).join('')}
+                  </div>`}
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div><div class="chart-ttl">AI Reteach Suggestions</div><div class="chart-sub">Generated from misconception patterns</div></div>
+            </div>
+            <div class="chart-body" style="padding-top:14px;">
+              ${reteach.length === 0
+                ? '<div class="text-muted text-sm">Suggestions appear after more data is collected.</div>'
+                : `<div class="reteach-list">${reteach.map((r,i) =>
+                    `<div class="reteach-item"><div class="reteach-num">${i+1}</div><div class="reteach-txt">${esc(r)}</div></div>`
+                  ).join('')}</div>`}
+            </div>
+          </div>
+        </div>
+
+        <!-- Per-student table -->
+        <div class="chart-card fade-up fade-up-4" style="margin-bottom:16px;">
+          <div class="chart-hdr"><div class="chart-ttl">Per-Student Breakdown</div><div class="chart-sub">Sorted by total errors</div></div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead><tr><th>Student</th><th>Submissions</th><th>Correct</th><th>Accuracy</th><th>Top Misconception</th></tr></thead>
+              <tbody>
+                ${students.map(s => {
+                  const ss      = submissions.filter(sub => sub.studentUid === s.uid);
+                  const correct = ss.filter(sub => sub.isCorrect === true).length;
+                  const pct     = ss.length > 0 ? Math.round(correct/ss.length*100) : 0;
+                  const topMErr = Object.entries(ss.reduce((acc,sub)=>{if(sub.misconception)acc[sub.misconception]=(acc[sub.misconception]||0)+1;return acc},{}))
+                                    .sort((a,b)=>b[1]-a[1])[0];
+                  const init    = (s.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+                  const pctColor= pct>=70?'var(--success)':pct>=40?'var(--warn)':'var(--danger)';
+                  return `<tr>
+                    <td><div style="display:flex;align-items:center;gap:9px;">
+                      <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${init}</div>
+                      <span style="font-weight:500;">${esc(s.name||s.uid)}</span>
+                    </div></td>
+                    <td>${ss.length}</td>
+                    <td style="color:var(--success);font-weight:700;">${correct}</td>
+                    <td>
+                      <div class="correct-pct-bar">
+                        <div class="pct-track"><div class="pct-fill" style="width:${pct}%;background:${pctColor};"></div></div>
+                        <span style="font-size:.78rem;font-weight:700;color:${pctColor};min-width:32px;">${pct}%</span>
+                      </div>
+                    </td>
+                    <td>${topMErr ? `<span class="badge badge-red" style="font-size:.72rem;">${esc(topMErr[0])}</span>` : '<span class="text-muted">—</span>'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- AI Summary -->
+        ${summary ? `
+        <div class="summary-card fade-up fade-up-4">
+          <div class="summary-label">📋 AI Class Summary</div>
+          <div class="summary-text">${esc(summary)}</div>
+        </div>` : ''}
+      `;
+
+      // ── Charts ──────────────────────────────────────────────
+      if (concepts.length > 0) {
+        new Chart(document.getElementById('pieChart'), {
+          type: 'doughnut',
+          data: {
+            labels: concepts.map(cap),
+            datasets: [{
+              data: concepts.map(c => byC[c]),
+              backgroundColor: concepts.map(c => getCC(c).bar),
+              borderColor:     concepts.map(c => getCC(c).bg),
+              borderWidth: 2,
+              hoverOffset: 8
+            }]
+          },
+          options: {
+            responsive:true, maintainAspectRatio:false, cutout:'60%',
+            plugins:{
+              legend:{ display:false },
+              tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed} error${ctx.parsed!==1?'s':''} (${Math.round(ctx.parsed/totalErrors*100)}%)` }}
+            }
+          }
+        });
+
+        new Chart(document.getElementById('barChart'), {
+          type: 'bar',
+          data: {
+            labels: concepts.map(cap),
+            datasets: [{
+              label: 'Errors',
+              data: concepts.map(c => byC[c]),
+              backgroundColor: concepts.map(c => getCC(c).bar),
+              borderColor:     concepts.map(c => getCC(c).bg),
+              borderWidth: 2,
+              borderRadius: 8,
+              borderSkipped: false
+            }]
+          },
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed.y} error${ctx.parsed.y!==1?'s':''}` }}},
+            scales: {
+              x:{ grid:{display:false}, ticks:{font:{family:'Outfit',size:12,weight:'600'},color:'#7470a8'} },
+              y:{ beginAtZero:true, ticks:{precision:0,color:'#b0aed0'}, grid:{color:'#e4e2f5'} }
+            }
+          }
+        });
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>

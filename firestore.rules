@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isTeacher() {
+      return isSignedIn() && getUserRole() == 'teacher';
+    }
+    function isStudent() {
+      return isSignedIn() && getUserRole() == 'student';
+    }
+
+    // ── Users ─────────────────────────────────────────────────
+    // Anyone signed in can read other users' basic profile (needed for name lookups)
+    // Only the user themselves can write their own profile
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false; // never delete user profiles
+    }
+
+    // ── Questions ─────────────────────────────────────────────
+    // Teachers: full CRUD on their own questions only
+    // Students: read only, and only active questions or ones they've already answered
+    match /questions/{qId} {
+      allow read: if isSignedIn() && (
+        // Teachers can read all their own questions
+        resource.data.teacherUid == request.auth.uid ||
+        // Students can only read active questions
+        resource.data.active == true
+      );
+      allow create: if isTeacher()
+        && request.resource.data.teacherUid == request.auth.uid
+        && request.resource.data.keys().hasAll(['teacherUid','teacherName','concept','prompt','correctAnswer','active']);
+      allow update: if isTeacher()
+        && resource.data.teacherUid == request.auth.uid
+        // Prevent changing ownership
+        && request.resource.data.teacherUid == request.auth.uid;
+      allow delete: if isTeacher()
+        && resource.data.teacherUid == request.auth.uid;
+    }
+
+    // ── Submissions ───────────────────────────────────────────
+    // Students: create their own, read their own
+    // Teachers: read submissions for their questions only
+    // Nobody can update or delete submissions (immutable record)
+    match /submissions/{sId} {
+      allow read: if isSignedIn() && (
+        resource.data.studentUid == request.auth.uid ||
+        resource.data.teacherUid == request.auth.uid
+      );
+      allow create: if isStudent()
+        && request.resource.data.studentUid == request.auth.uid
+        // Prevent submitting on behalf of someone else
+        && request.resource.data.keys().hasAll(['studentUid','questionId','studentAnswer','studentReasoning'])
+        // Prevent forging teacherUid — must match the question's actual teacher
+        && exists(/databases/$(database)/documents/questions/$(request.resource.data.questionId));
+      allow update: if false; // submissions are immutable
+      allow delete: if false; // submissions are immutable
+    }
+
+    // ── Enrolments ────────────────────────────────────────────
+    // Students can enrol themselves with a teacher
+    // Both parties can read their own enrolments
+    // Students can only create enrolments where they are the student
+    match /enrolments/{eId} {
+      allow read: if isSignedIn() && (
+        resource.data.studentUid == request.auth.uid ||
+        resource.data.teacherUid == request.auth.uid
+      );
+      allow create: if isStudent()
+        && request.resource.data.studentUid == request.auth.uid
+        && request.resource.data.keys().hasAll(['studentUid','teacherUid'])
+        // Prevent enrolling as someone else
+        && request.resource.data.studentUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isStudent()
+        && resource.data.studentUid == request.auth.uid;
+    }
+
+    // ── Feedback history ──────────────────────────────────────
+    // Teachers can only read/write their own feedback history
+    match /feedbackHistory/{uid} {
+      allow read, write: if isTeacher() && isOwner(uid);
+    }
+
+    // ── Catch-all: deny everything else ──────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

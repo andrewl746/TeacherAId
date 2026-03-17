@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Students — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="app-layout" id="root"></div>
+
+  <!-- Student detail modal -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal-box" style="max-width:640px;">
+      <div class="modal-header"><div class="modal-title" id="detailTitle">Student</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body" id="detailBody"><div class="empty-state"><div class="spinner spinner-dark"></div></div></div>
+      <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Class analysis modal -->
+  <div class="modal-overlay" id="analysisModal">
+    <div class="modal-box" style="max-width:640px;">
+      <div class="modal-header"><div class="modal-title">📊 Class Analysis</div><button class="modal-close" onclick="document.getElementById('analysisModal').classList.remove('active')">✕</button></div>
+      <div class="modal-body" id="analysisBody"><div class="empty-state"><div class="spinner spinner-dark"></div></div></div>
+      <div class="modal-footer"><button class="btn btn-ghost" onclick="document.getElementById('analysisModal').classList.remove('active')">Close</button></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, getTeacherStudents, getSubmissionsForTeacher, getTeacherQuestions }
+      from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'teacher') window.location.href = 'auth-login.html?role=teacher';
+
+    let allStudents = [], allSubmissions = [], allQuestions = [];
+
+    async function render() {
+      document.getElementById('root').innerHTML = buildSidebar('students') + `
+        <div class="main">
+          <div class="topbar">
+            <div><div class="topbar-title">Students</div><div class="topbar-sub" id="studentSub">Loading…</div></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost" onclick="openAnalysis()">📊 Class Analysis</button>
+            </div>
+          </div>
+          <div class="page-content animate-in" id="pageContent">
+            <div class="card"><div class="empty-state"><div class="spinner spinner-dark"></div><div class="empty-state-sub" style="margin-top:12px;">Loading…</div></div></div>
+          </div>
+        </div>`;
+
+      initSidebarProfile();
+
+      try {
+        [allStudents, allSubmissions, allQuestions] = await Promise.all([
+          getTeacherStudents(user.uid),
+          getSubmissionsForTeacher(user.uid),
+          getTeacherQuestions(user.uid)
+        ]);
+
+        document.getElementById('studentSub').textContent =
+          `${allStudents.length} student${allStudents.length!==1?'s':''} · ${allSubmissions.length} submission${allSubmissions.length!==1?'s':''}`;
+
+        if (allStudents.length === 0) {
+          document.getElementById('pageContent').innerHTML = `
+            <div class="card"><div class="empty-state">
+              <div class="empty-state-icon">👥</div>
+              <div class="empty-state-title">No students yet</div>
+              <div class="empty-state-sub">Students appear here after they enrol using your name.</div>
+            </div></div>`;
+          return;
+        }
+
+        document.getElementById('pageContent').innerHTML = `
+          <div class="students-grid">
+            ${allStudents.map(s => {
+              const subs = allSubmissions.filter(sub => sub.studentUid === s.uid);
+              const misconceptions = [...new Set(subs.map(sub=>sub.misconception).filter(Boolean))];
+              const initials = (s.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+              return `
+              <div class="student-card" onclick="openDetail('${s.uid}')">
+                <div class="s-avatar">${initials}</div>
+                <div class="s-name">${esc(s.name||'Unknown')}</div>
+                <div class="s-meta">${subs.length} submission${subs.length!==1?'s':''}</div>
+                ${misconceptions.length ? `<div class="s-meta mt-1" style="color:var(--warn);">⚠️ ${misconceptions.length} misconception type${misconceptions.length!==1?'s':''}</div>` : ''}
+                <div class="s-submissions">View details →</div>
+              </div>`;
+            }).join('')}
+          </div>`;
+      } catch(e) {
+        document.getElementById('pageContent').innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-title">Error</div><div class="empty-state-sub">${esc(e.message)}</div></div></div>`;
+      }
+    }
+
+    window.openDetail = async function(studentUid) {
+      const s = allStudents.find(s => s.uid === studentUid);
+      if (!s) return;
+      document.getElementById('detailTitle').textContent = s.name || 'Student';
+      document.getElementById('detailBody').innerHTML = '<div class="empty-state"><div class="spinner spinner-dark"></div></div>';
+      document.getElementById('detailModal').classList.add('active');
+
+      const subs = allSubmissions.filter(sub => sub.studentUid === studentUid);
+      let insights = null;
+      if (subs.length > 0) {
+        try {
+          insights = await generateStudentInsights(s.name, subs.map(sub => ({
+            questionPrompt: sub.questionPrompt || '—',
+            isCorrect:      sub.isCorrect,
+            misconception:  sub.misconception,
+            analysis:       sub.analysis
+          })));
+        } catch(e) { /* insights optional */ }
+      }
+
+      const recurr  = insights?.recurringMisconceptions || [];
+      const interv  = insights?.suggestedInterventions  || [];
+      const summary = insights?.teacherSummary          || '';
+
+      document.getElementById('detailBody').innerHTML = `
+        ${summary ? `<div style="background:var(--accent-soft);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:.875rem;line-height:1.65;">${esc(summary)}</div>` : ''}
+
+        <div style="margin-bottom:16px;">
+          <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Submissions (${subs.length})</div>
+          ${subs.length === 0 ? '<div class="text-muted text-sm">No submissions yet.</div>' :
+            subs.map(sub => `
+            <div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <div style="font-size:.82rem;font-weight:500;flex:1;min-width:0;">${esc((sub.questionPrompt||'Question').slice(0,60))}${(sub.questionPrompt||'').length>60?'…':''}</div>
+                <span class="badge ${sub.isCorrect?'badge-green':'badge-red'}">${sub.isCorrect?'✓ Correct':'✗ Incorrect'}</span>
+              </div>
+              ${sub.misconception ? `<div style="margin-top:3px;"><span class="badge badge-red">${esc(sub.misconception)}</span></div>` : ''}
+              ${sub.analysis ? `<div style="font-size:.78rem;color:var(--muted);margin-top:4px;">${esc(sub.analysis)}</div>` : ''}
+            </div>`).join('')}
+        </div>
+
+        ${recurr.length ? `
+        <div style="margin-bottom:16px;">
+          <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Recurring Misconceptions</div>
+          ${recurr.map(r=>`<div style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:.82rem;font-weight:500;">${esc(r.misconception||'—')}</div>
+            <div style="display:flex;gap:6px;"><span class="badge badge-red">${r.count}×</span></div>
+          </div>`).join('')}
+        </div>` : ''}
+
+        ${interv.length ? `
+        <div>
+          <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Suggested Interventions</div>
+          ${interv.map((r,i)=>`<div style="display:flex;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:7px;"><div style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">${i+1}</div><div style="font-size:.82rem;line-height:1.55;">${esc(r)}</div></div>`).join('')}
+        </div>` : ''}
+      `;
+    };
+
+    window.openAnalysis = async function() {
+      document.getElementById('analysisBody').innerHTML = '<div class="empty-state"><div class="spinner spinner-dark"></div></div>';
+      document.getElementById('analysisModal').classList.add('active');
+
+      if (allSubmissions.length === 0) {
+        document.getElementById('analysisBody').innerHTML = '<div class="empty-state" style="padding:24px;"><div class="empty-state-title">No submissions yet</div><div class="empty-state-sub">Analysis appears after students start answering questions.</div></div>';
+        return;
+      }
+
+      try {
+        const insights = await generateClassInsights(
+          allSubmissions.map(sub => ({
+            studentName:    allStudents.find(s=>s.uid===sub.studentUid)?.name || sub.studentUid,
+            questionPrompt: sub.questionPrompt || '—',
+            isCorrect:      sub.isCorrect,
+            misconception:  sub.misconception,
+            analysis:       sub.analysis
+          })),
+          allQuestions
+        );
+
+        if (insights?.weakestConcept) localStorage.setItem('weakestConcept_' + user.uid, insights.weakestConcept);
+
+        const top     = insights?.topMisconceptions       || [];
+        const reteach = insights?.suggestedReteachTopics  || [];
+        const summary = insights?.teacherSummary          || '';
+
+        document.getElementById('analysisBody').innerHTML = `
+          ${summary ? `<p style="font-size:.875rem;line-height:1.7;margin-bottom:16px;">${esc(summary)}</p>` : ''}
+          ${top.length ? `
+          <div style="margin-bottom:16px;">
+            <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Top Misconceptions</div>
+            ${top.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;">
+              <div><div style="font-size:.85rem;font-weight:500;">${esc(m.misconception||'—')}</div><div style="font-size:.72rem;color:var(--muted);">${esc(m.concept||'—')}</div></div>
+              <div style="display:flex;gap:8px;"><span class="badge badge-red">${m.count} student${m.count!==1?'s':''}</span><span style="font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:99px;background:#fef3c7;color:#92400e;">${m.trend||'—'}</span></div>
+            </div>`).join('')}
+          </div>` : ''}
+          ${reteach.length ? `
+          <div>
+            <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Suggested Reteach Topics</div>
+            ${reteach.map((r,i)=>`<div style="display:flex;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:7px;"><div style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">${i+1}</div><div style="font-size:.82rem;line-height:1.55;">${esc(r)}</div></div>`).join('')}
+          </div>` : ''}`;
+      } catch(e) {
+        document.getElementById('analysisBody').innerHTML = `<div class="alert alert-error">Analysis failed: ${esc(e.message)}</div>`;
+      }
+    };
+
+    window.closeModal = () => document.getElementById('detailModal').classList.remove('active');
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    render();
+  </script>
+</body>
+</html>

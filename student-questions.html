@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Question — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    .sq-layout { min-height:100vh; background:var(--sidebar-bg); display:flex; align-items:center; justify-content:center; padding:24px 16px; }
+  </style>
+</head>
+<body>
+  <div class="sq-layout" id="app">
+    <div class="student-card-wrap">
+      <div class="student-card-header">
+        <div class="student-card-logo">
+          <div class="student-card-logo-img"><img src="images/logo.png" alt="TeacherAId"/></div>
+          <div class="student-card-logo-text">TeacherAId</div>
+        </div>
+      </div>
+      <div class="student-card-body">
+        <div class="empty-state" style="padding:48px 24px;">
+          <div class="spinner spinner-dark" style="width:30px;height:30px;margin:0 auto 12px;"></div>
+          <div class="empty-state-sub">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, getStudentSubmissions, saveSubmission, enrolStudentWithTeacher }
+      from './firebase.js';
+    import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { db } from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'student') window.location.href = 'auth-login.html?role=student';
+
+    const questionId  = sessionStorage.getItem('activeQuestionId');
+    const teacherName = sessionStorage.getItem('activeTeacherName') || 'Teacher';
+    const teacherUid  = sessionStorage.getItem('activeTeacherUid');
+
+    if (!questionId) { window.location.href = 'student-dashboard.html'; }
+
+    let question   = null;
+    let myPrevSub  = null; // previous submission for this question
+
+    async function init() {
+      // Load question from Firestore
+      const qSnap = await getDoc(doc(db, 'questions', questionId));
+      if (!qSnap.exists()) { renderMsg('Question not found', 'This question may have been removed.'); return; }
+      question = { id: qSnap.id, ...qSnap.data() };
+
+      // Check if already answered
+      const mySubs = await getStudentSubmissions(user.uid);
+      myPrevSub = mySubs.find(s => s.questionId === questionId) || null;
+
+      if (myPrevSub) {
+        renderPreviousAnswer();
+      } else {
+        renderQuestion();
+      }
+    }
+
+    function renderHeader(badge) {
+      return `
+        <div class="student-card-header">
+          <div class="student-card-logo">
+            <div class="student-card-logo-img"><img src="images/logo.png" alt="TeacherAId"/></div>
+            <div class="student-card-logo-text">TeacherAId</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${badge || ''}
+            <span class="student-badge">${esc(profile?.name || user.email)}</span>
+          </div>
+        </div>`;
+    }
+
+    function renderQuestion() {
+      document.getElementById('app').innerHTML = `
+        <div class="student-card-wrap">
+          ${renderHeader(`<span class="badge badge-blue">${esc(teacherName)}</span>`)}
+          <div class="student-card-body">
+            <div id="alertBox"></div>
+            <div class="q-label">Question — ${esc(question.concept||question.subject||'')}</div>
+            <div class="question-box">${esc(question.prompt)}</div>
+            ${question.codeSnippet ? `
+              <div style="margin-bottom:18px;">
+                <div class="q-label" style="margin-bottom:6px;">Supporting Material</div>
+                <pre style="background:#1e1d3f;color:#c8c5f8;border-radius:var(--radius);padding:14px 16px;font-size:.85rem;overflow-x:auto;white-space:pre-wrap;line-height:1.65;">${esc(question.codeSnippet)}</pre>
+              </div>` : ''}
+            <div class="form-group">
+              <label class="form-label">Your Answer</label>
+              <input class="form-input" type="text" id="answerInput" placeholder="Write your answer here…" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Your Reasoning</label>
+              <textarea class="form-textarea" id="reasoningInput" rows="4" placeholder="Explain your thinking step by step…"></textarea>
+              <div class="form-hint">Your reasoning helps your teacher understand how you're thinking.</div>
+            </div>
+            <div id="loadingRow" style="display:none;align-items:center;gap:10px;margin-bottom:12px;color:var(--muted);font-size:.85rem;">
+              <div class="spinner spinner-dark" style="width:18px;height:18px;"></div> Analysing your response…
+            </div>
+          </div>
+          <div class="student-card-footer">
+            <button onclick="goBack()" class="btn btn-ghost">← Back</button>
+            <button class="btn btn-primary btn-lg" id="submitBtn" onclick="submit()">Submit Answer →</button>
+          </div>
+        </div>`;
+    }
+
+    function renderPreviousAnswer() {
+      const sub = myPrevSub;
+      document.getElementById('app').innerHTML = `
+        <div class="student-card-wrap">
+          ${renderHeader(`<span class="badge badge-green">Answered</span>`)}
+          <div class="student-card-body">
+            <div class="q-label">Question — ${esc(question.concept||question.subject||'')}</div>
+            <div class="question-box">${esc(question.prompt)}</div>
+            ${question.codeSnippet ? `
+              <div style="margin-bottom:18px;">
+                <div class="q-label" style="margin-bottom:6px;">Supporting Material</div>
+                <pre style="background:#1e1d3f;color:#c8c5f8;border-radius:var(--radius);padding:14px 16px;font-size:.85rem;overflow-x:auto;white-space:pre-wrap;line-height:1.65;">${esc(question.codeSnippet)}</pre>
+              </div>` : ''}
+
+            <div class="alert ${sub.isCorrect ? 'alert-success' : 'alert-error'}" style="margin-bottom:18px;">
+              <div style="font-weight:700;margin-bottom:4px;">${sub.isCorrect ? '✓ You got this one right!' : '✗ Not quite right.'}</div>
+              ${sub.misconception ? `<div class="text-sm">Misconception: <strong>${esc(sub.misconception)}</strong></div>` : ''}
+              ${sub.analysis ? `<div class="text-sm" style="margin-top:4px;">${esc(sub.analysis)}</div>` : ''}
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+              <div>
+                <div class="form-label" style="margin-bottom:6px;">Your Answer</div>
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:.875rem;">${esc(sub.studentAnswer||'—')}</div>
+              </div>
+              <div>
+                <div class="form-label" style="margin-bottom:6px;">Correct Answer</div>
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:.875rem;">${esc(question.correctAnswer||'—')}</div>
+              </div>
+            </div>
+
+            <div class="form-label" style="margin-bottom:6px;">Your Reasoning</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:.875rem;line-height:1.6;margin-bottom:8px;">${esc(sub.studentReasoning||'—')}</div>
+
+            ${sub.reasoningPattern ? `
+            <div class="form-label" style="margin-bottom:6px;margin-top:12px;">AI Reasoning Pattern</div>
+            <div style="background:var(--accent-soft);border:1px solid rgba(53,51,205,.15);border-radius:var(--radius-sm);padding:10px 14px;font-size:.82rem;line-height:1.6;">${esc(sub.reasoningPattern)}</div>` : ''}
+          </div>
+          <div class="student-card-footer">
+            <button onclick="goBack()" class="btn btn-ghost">← Back to questions</button>
+          </div>
+        </div>`;
+    }
+
+    function renderMsg(title, sub) {
+      document.getElementById('app').innerHTML = `
+        <div class="student-card-wrap">
+          ${renderHeader('')}
+          <div class="student-card-body">
+            <div class="empty-state" style="padding:48px 24px;">
+              <div class="empty-state-title">${esc(title)}</div>
+              <div class="empty-state-sub">${esc(sub)}</div>
+              <button onclick="goBack()" class="btn btn-ghost" style="margin-top:16px;">← Back</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    window.goBack = () => {
+      window.location.href = 'student-dashboard.html?teacher=' + encodeURIComponent(teacherUid) + '&name=' + encodeURIComponent(teacherName);
+    };
+
+    window.submit = async function() {
+      const answer    = document.getElementById('answerInput').value.trim();
+      const reasoning = document.getElementById('reasoningInput').value.trim();
+      const alertBox  = document.getElementById('alertBox');
+      const btn       = document.getElementById('submitBtn');
+      alertBox.innerHTML = '';
+
+      if (!answer || !reasoning) {
+        alertBox.innerHTML = '<div class="alert alert-error" style="margin-bottom:16px;">Please provide both an answer and your reasoning.</div>';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+      document.getElementById('loadingRow').style.display = 'flex';
+
+      try {
+        // Classify with Claude
+        const result = await classifySubmission({
+          subject:          question.subject || 'Programming',
+          concept:          question.concept || '',
+          prompt:           question.prompt,
+          codeSnippet:      question.codeSnippet || '',
+          correctAnswer:    question.correctAnswer,
+          studentAnswer:    answer,
+          studentReasoning: reasoning
+        });
+
+        // Save to Firestore
+        await saveSubmission({
+          studentUid:       user.uid,
+          studentName:      profile?.name || user.email,
+          teacherUid:       teacherUid || question.teacherUid,
+          questionId:       question.id,
+          questionPrompt:   question.prompt,
+          studentAnswer:    answer,
+          studentReasoning: reasoning,
+          isCorrect:        result.isCorrect,
+          misconception:    result.misconception || null,
+          analysis:         result.analysis      || null,
+          reasoningPattern: result.reasoningPattern || null,
+          confidence:       result.confidence    || null,
+          evidence:         result.evidence      || []
+        });
+
+        // Ensure student is enrolled with this teacher
+        if (teacherUid) await enrolStudentWithTeacher(user.uid, teacherUid);
+
+        document.getElementById('loadingRow').style.display = 'none';
+        document.getElementById('answerInput').disabled    = true;
+        document.getElementById('reasoningInput').disabled = true;
+
+        alertBox.innerHTML = `
+          <div class="alert ${result.isCorrect ? 'alert-success' : 'alert-error'}" style="margin-bottom:16px;">
+            <div style="font-weight:700;margin-bottom:4px;">${result.isCorrect ? '✓ Correct!' : '✗ Not quite.'}</div>
+            ${result.misconception ? `<div class="text-sm">Misconception: <strong>${esc(result.misconception)}</strong></div>` : ''}
+            ${result.analysis ? `<div class="text-sm" style="margin-top:4px;">${esc(result.analysis)}</div>` : ''}
+          </div>`;
+
+        btn.textContent = '← Back to questions';
+        btn.disabled    = false;
+        btn.onclick = () => window.goBack();
+
+      } catch(e) {
+        document.getElementById('loadingRow').style.display = 'none';
+        alertBox.innerHTML = `<div class="alert alert-error" style="margin-bottom:16px;">Error: ${esc(e.message)}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Try Again';
+        btn.onclick = () => window.submit();
+      }
+    };
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    init();
+  </script>
+</body>
+</html>

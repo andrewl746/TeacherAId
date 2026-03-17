@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="app-layout" id="root"></div>
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, getTeacherQuestions, getSubmissionsForTeacher, getTeacherStudents }
+      from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'teacher') { window.location.href = 'auth-login.html?role=teacher'; }
+
+    document.getElementById('root').innerHTML = buildSidebar('dashboard') + `
+      <div class="main">
+        <div class="topbar">
+          <div>
+            <div class="topbar-title">Dashboard</div>
+            <div class="topbar-sub">Welcome back, ${profile?.name || 'Teacher'}</div>
+          </div>
+        </div>
+        <div class="page-content animate-in">
+          <div class="stat-grid">
+            <div class="stat-card"><div class="stat-label">Questions</div><div class="stat-value" id="statQ">—</div><div class="stat-sub">In bank</div></div>
+            <div class="stat-card"><div class="stat-label">Students</div><div class="stat-value" id="statS">—</div><div class="stat-sub">Enrolled</div></div>
+            <div class="stat-card"><div class="stat-label">Submissions</div><div class="stat-value" id="statSub">—</div><div class="stat-sub">Total answers</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="card">
+              <div class="card-header"><div class="card-title">❓ Questions</div></div>
+              <div class="card-body">
+                <p class="text-muted text-sm" style="margin-bottom:16px;">Create questions manually or generate them with AI. Set one as active for students to answer.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <a href="teacher-questions.html" class="btn btn-primary">View All</a>
+                  <a href="teacher-create-question.html" class="btn btn-secondary">Create</a>
+                  <a href="teacher-generate-question.html" class="btn btn-ghost">Generate ✨</a>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><div class="card-title">👥 Students</div></div>
+              <div class="card-body">
+                <p class="text-muted text-sm" style="margin-bottom:16px;">View student submissions, misconceptions, and AI-generated intervention suggestions.</p>
+                <div style="display:flex;gap:8px;">
+                  <a href="teacher-students.html" class="btn btn-primary">View Students</a>
+                  <a href="class-analytics.html" class="btn btn-ghost">Analytics 📊</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;" id="recentCard">
+            <div class="card-header"><div class="card-title">📋 Recent Questions</div><a href="teacher-questions.html" class="btn btn-sm btn-ghost">View all →</a></div>
+            <div class="card-body"><div class="text-muted text-sm">Loading…</div></div>
+          </div>
+        </div>
+      </div>`;
+
+    initSidebarProfile();
+
+    try {
+      const [questions, submissions, students] = await Promise.all([
+        getTeacherQuestions(user.uid),
+        getSubmissionsForTeacher(user.uid),
+        getTeacherStudents(user.uid)
+      ]);
+      document.getElementById('statQ').textContent   = questions.length;
+      document.getElementById('statS').textContent   = students.length;
+      document.getElementById('statSub').textContent = submissions.length;
+
+      const recentCard = document.getElementById('recentCard');
+      if (questions.length === 0) {
+        recentCard.querySelector('.card-body').innerHTML =
+          '<div class="empty-state" style="padding:24px;"><div class="empty-state-title">No questions yet</div><div class="empty-state-sub">Create your first question to get started.</div><a href="teacher-create-question.html" class="btn btn-primary" style="margin-top:12px;">Create Question</a></div>';
+      } else {
+        recentCard.querySelector('.card-body').innerHTML = `
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead><tr><th>Question</th><th>Subject</th><th>Concept</th><th>Status</th></tr></thead>
+              <tbody>
+                ${questions.slice(0,5).map(q=>`
+                <tr>
+                  <td style="font-weight:500;">${esc(q.prompt)}</td>
+                  <td class="cell-muted">${esc(q.subject||'—')}</td>
+                  <td><span class="badge badge-blue">${esc(q.concept||'—')}</span></td>
+                  <td>${q.active ? '<span class="badge badge-green" style="display:inline-flex;align-items:center;gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#065f46;flex-shrink:0;"></span>Active</span>' : '<span class="badge badge-gray">Inactive</span>'}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+    } catch(e) {
+      document.getElementById('statQ').textContent = '?';
+      console.error(e);
+    }
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  </script>
+</body>
+</html>

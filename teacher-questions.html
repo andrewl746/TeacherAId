@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Questions — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    /* Question rows */
+    .q-row { cursor: pointer; transition: background .1s; }
+    .q-row:hover td { background: var(--surface); }
+    .q-row.expanded td { background: var(--accent-soft); }
+
+    /* Expandable detail panel — lives in a full-width row below */
+    .q-detail-row td {
+      padding: 0 !important;
+      border-bottom: 1px solid var(--border);
+    }
+    .q-detail-inner {
+      padding: 16px 20px 20px;
+      background: var(--surface);
+      border-top: 2px solid var(--accent);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 24px;
+    }
+    .detail-field-label {
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .detail-field-value {
+      font-size: .875rem;
+      color: var(--text);
+      line-height: 1.6;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      white-space: pre-wrap;
+      font-family: inherit;
+    }
+    .detail-field-value.mono {
+      font-family: monospace;
+      font-size: .82rem;
+      background: #1e1d3f;
+      color: #c8c5f8;
+      border-color: transparent;
+    }
+    .detail-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout" id="root"></div>
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, getTeacherQuestions, setActiveQuestion, deleteQuestion }
+      from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'teacher') window.location.href = 'auth-login.html?role=teacher';
+
+    let questions   = [];
+    let expandedId  = null;
+
+    async function render() {
+      document.getElementById('root').innerHTML = buildSidebar('questions') + `
+        <div class="main">
+          <div class="topbar">
+            <div><div class="topbar-title">Question Bank</div><div class="topbar-sub" id="qCount">Loading…</div></div>
+            <div style="display:flex;gap:8px;">
+              <a href="teacher-create-question.html" class="btn btn-secondary">✏️ Create</a>
+              <a href="teacher-generate-question.html" class="btn btn-primary">✨ Generate with AI</a>
+            </div>
+          </div>
+          <div class="page-content animate-in">
+            <div class="card" id="tableCard">
+              <div class="empty-state"><div class="spinner spinner-dark"></div><div class="empty-state-sub" style="margin-top:12px;">Loading…</div></div>
+            </div>
+          </div>
+        </div>`;
+
+      initSidebarProfile();
+
+      try {
+        questions = await getTeacherQuestions(user.uid);
+        document.getElementById('qCount').textContent =
+          `${questions.length} question${questions.length!==1?'s':''} total`;
+
+        if (questions.length === 0) {
+          document.getElementById('tableCard').innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">❓</div>
+              <div class="empty-state-title">No questions yet</div>
+              <div class="empty-state-sub">Create your first question manually or generate one with AI.</div>
+              <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+                <a href="teacher-create-question.html" class="btn btn-secondary">Create manually</a>
+                <a href="teacher-generate-question.html" class="btn btn-primary">Generate with AI ✨</a>
+              </div>
+            </div>`;
+          return;
+        }
+
+        renderTable();
+      } catch(e) {
+        document.getElementById('tableCard').innerHTML =
+          `<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">Error loading</div><div class="empty-state-sub">${esc(e.message)}</div></div>`;
+      }
+    }
+
+    function renderTable() {
+      let rows = '';
+      questions.forEach(q => {
+        const isExpanded = expandedId === q.id;
+
+        // Status badge — inline dot + text
+        const statusBadge = q.active
+          ? `<span class="badge badge-green" style="display:inline-flex;align-items:center;gap:5px;">
+               <span style="width:6px;height:6px;border-radius:50%;background:#065f46;flex-shrink:0;"></span>Active
+             </span>`
+          : `<span class="badge badge-gray">Inactive</span>`;
+
+        rows += `
+          <tr class="q-row${isExpanded?' expanded':''}" onclick="toggleExpand('${q.id}')">
+            <td>
+              <div style="font-weight:500;">${esc(q.prompt)}</div>
+              <div class="cell-muted" style="margin-top:3px;font-size:.7rem;">ID: ${q.id} · click to ${isExpanded?'collapse':'view details'}</div>
+            </td>
+            <td class="cell-muted">${esc(q.subject||'—')}</td>
+            <td><span class="badge badge-blue">${esc(q.concept||'—')}</span></td>
+            <td>${statusBadge}</td>
+            <td>
+              <span style="color:var(--muted);font-size:.85rem;">${isExpanded ? '▲' : '▼'}</span>
+            </td>
+          </tr>`;
+
+        // Expanded detail row
+        if (isExpanded) {
+          rows += `
+            <tr class="q-detail-row">
+              <td colspan="5">
+                <div class="q-detail-inner">
+                  <div>
+                    <div class="detail-field-label">Question Prompt</div>
+                    <div class="detail-field-value">${esc(q.prompt)}</div>
+                  </div>
+                  <div>
+                    <div class="detail-field-label">Model Answer</div>
+                    <div class="detail-field-value">${esc(q.correctAnswer||'—')}</div>
+                  </div>
+                  ${q.expectedReasoning ? `
+                  <div style="grid-column:1/-1;">
+                    <div class="detail-field-label">Expected Reasoning</div>
+                    <div class="detail-field-value">${esc(q.expectedReasoning)}</div>
+                  </div>` : ''}
+                  ${q.codeSnippet ? `
+                  <div style="grid-column:1/-1;">
+                    <div class="detail-field-label">Supporting Material</div>
+                    <div class="detail-field-value mono">${esc(q.codeSnippet)}</div>
+                  </div>` : ''}
+                  <div class="detail-actions">
+                    ${q.active
+                      ? `<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();deactivate('${q.id}')">⏸ Set Inactive</button>
+                         <span class="badge badge-green" style="align-self:center;display:inline-flex;align-items:center;gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#065f46;flex-shrink:0;"></span>Currently Active</span>`
+                      : `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();activate('${q.id}')">Set as Active</button>`}
+                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();del('${q.id}')">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>`;
+        }
+      });
+
+      document.getElementById('tableCard').innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead><tr>
+              <th>Question</th>
+              <th>Subject</th>
+              <th>Concept</th>
+              <th>Status</th>
+              <th style="width:32px;"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    window.toggleExpand = function(id) {
+      expandedId = expandedId === id ? null : id;
+      renderTable();
+    };
+
+    window.activate = async function(id) {
+      await setActiveQuestion(id, user.uid);
+      questions = await getTeacherQuestions(user.uid);
+      renderTable();
+    };
+
+    window.deactivate = async function(id) {
+      const { updateDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      const { db } = await import('./firebase.js');
+      await updateDoc(doc(db, 'questions', id), { active: false });
+      questions = await getTeacherQuestions(user.uid);
+      renderTable();
+    };
+
+    window.del = async function(id) {
+      if (!confirm('Delete this question?')) return;
+      await deleteQuestion(id);
+      questions = questions.filter(q => q.id !== id);
+      if (expandedId === id) expandedId = null;
+      renderTable();
+    };
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    render();
+  </script>
+</body>
+</html>

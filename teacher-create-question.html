@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Create Question — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="app-layout" id="root"></div>
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, createQuestion } from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'teacher') window.location.href = 'auth-login.html?role=teacher';
+
+    document.getElementById('root').innerHTML = buildSidebar('create') + `
+      <div class="main">
+        <div class="topbar"><div><div class="topbar-title">Create Question</div><div class="topbar-sub">Write a diagnostic question and save it to your question bank</div></div></div>
+        <div class="page-content animate-in">
+          <div style="max-width:680px;">
+            <div class="card">
+              <div class="card-header"><div class="card-title">✏️ New Question</div></div>
+              <div class="card-body">
+                <div id="alertBox"></div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Subject</label>
+                    <input class="form-input" type="text" id="subject" placeholder="e.g. Python, C++, Math, Biology"/>
+                    <div class="form-hint">Any subject — AI analysis is language-agnostic.</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Concept / Topic</label>
+                    <input class="form-input" type="text" id="concept" placeholder="e.g. loops, photosynthesis, derivatives"/>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Question Prompt</label>
+                  <textarea class="form-textarea" id="prompt" rows="3" placeholder="What question do you want students to answer and explain their reasoning for?"></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Supporting Material <span style="font-weight:400;color:var(--muted);">(optional)</span></label>
+                  <textarea class="form-textarea" id="supportingMaterial" rows="4"
+                    placeholder="Paste any code, equation, passage, diagram description, or data table students need to reference. Leave blank if not needed."></textarea>
+                  <div class="form-hint">This is shown to students alongside the question prompt.</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Model Answer</label>
+                  <input class="form-input" type="text" id="correctAnswer" placeholder="The correct answer students should arrive at"/>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Expected Reasoning</label>
+                  <textarea class="form-textarea" id="expectedReasoning" rows="3"
+                    placeholder="What reasoning or explanation should a student provide to demonstrate understanding? AI uses this to evaluate responses."></textarea>
+                  <div class="form-hint">The more detail here, the better the AI can identify misconceptions.</div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
+                  <a href="teacher-questions.html" class="btn btn-ghost">Cancel</a>
+                  <button class="btn btn-primary btn-lg" id="saveBtn" onclick="save()">Save Question</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    initSidebarProfile();
+
+    window.save = async function() {
+      const subject           = document.getElementById('subject').value.trim();
+      const concept           = document.getElementById('concept').value.trim();
+      const prompt            = document.getElementById('prompt').value.trim();
+      const supportingMaterial= document.getElementById('supportingMaterial').value.trim();
+      const correctAnswer     = document.getElementById('correctAnswer').value.trim();
+      const expectedReasoning = document.getElementById('expectedReasoning').value.trim();
+      const alertBox          = document.getElementById('alertBox');
+      const btn               = document.getElementById('saveBtn');
+
+      if (!concept || !prompt || !correctAnswer) {
+        alertBox.innerHTML = '<div class="alert alert-error">Concept, prompt, and model answer are required.</div>';
+        return;
+      }
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></div> Saving…';
+
+      try {
+        await createQuestion(user.uid, profile.name, {
+          subject, concept, prompt,
+          codeSnippet: supportingMaterial,
+          correctAnswer, expectedReasoning
+        });
+        alertBox.innerHTML = `<div class="alert alert-success">✓ Question saved! <a href="teacher-questions.html" style="color:inherit;font-weight:700;">View all →</a></div>`;
+        ['subject','concept','prompt','supportingMaterial','correctAnswer','expectedReasoning']
+          .forEach(id => document.getElementById(id).value = '');
+      } catch(e) {
+        alertBox.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Question';
+      }
+    };
+  </script>
+</body>
+</html>

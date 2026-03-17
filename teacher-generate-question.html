@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Generate Question — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="app-layout" id="root"></div>
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, createQuestion, getFeedbackHistory, saveFeedbackHistory }
+      from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'teacher') window.location.href = 'auth-login.html?role=teacher';
+
+    let history = await getFeedbackHistory(user.uid);
+    const weakest = localStorage.getItem('weakestConcept_' + user.uid) || null;
+
+    function render() {
+      document.getElementById('root').innerHTML = buildSidebar('generate') + `
+        <div class="main">
+          <div class="topbar"><div><div class="topbar-title">Generate Question</div><div class="topbar-sub">AI builds the question — you review and save it</div></div></div>
+          <div class="page-content animate-in">
+            <div class="gen-layout">
+              <div>
+                <div class="card mb-5">
+                  <div class="card-header"><div class="card-title">✨ Step 1 — Configure</div></div>
+                  <div class="card-body">
+                    ${weakest ? `<div class="alert alert-info" style="margin-bottom:14px;">⚠️ Analytics: class is weakest at <strong>${esc(weakest)}</strong> — AI will factor this in.</div>` : ''}
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">Subject</label>
+                        <input class="form-input" type="text" id="subject" placeholder="Python, C++, Math, Biology…"/>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Concept</label>
+                        <input class="form-input" type="text" id="concept" placeholder="loops, derivatives, photosynthesis…"/>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">Difficulty</label>
+                        <select class="form-input" id="difficulty" style="cursor:pointer;">
+                          <option value="easy">Easy</option>
+                          <option value="medium" selected>Medium</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Question Type</label>
+                        <select class="form-input" id="questionType" style="cursor:pointer;">
+                          <option value="short_answer">Short Answer</option>
+                          <option value="explain_concept">Explain a Concept</option>
+                          <option value="apply_knowledge">Apply Knowledge</option>
+                          <option value="analyse_example">Analyse an Example</option>
+                          <option value="identify_error">Identify the Error</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div id="genAlertBox"></div>
+                    <button class="btn btn-primary btn-lg" id="genBtn" onclick="generate()">
+                      <span id="genBtnText">✨ Generate Question</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="card mb-5" id="outputCard" style="display:none;">
+                  <div class="card-header"><div class="card-title">📋 Step 2 — Review & edit</div><div class="text-sm text-muted">All fields editable before saving</div></div>
+                  <div class="card-body">
+                    <div id="outputAlertBox"></div>
+                    <div class="form-row">
+                      <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="outSubject" type="text"/></div>
+                      <div class="form-group"><label class="form-label">Concept</label><input class="form-input" id="outConcept" type="text"/></div>
+                    </div>
+                    <div class="form-group"><label class="form-label">Question Prompt</label><textarea class="form-textarea" id="outPrompt" rows="3"></textarea></div>
+                    <div class="form-group">
+                      <label class="form-label">Supporting Material <span style="font-weight:400;color:var(--muted);">(optional)</span></label>
+                      <textarea class="form-textarea" id="outMaterial" rows="4" placeholder="Any code, equation, passage, or data students need to reference. Leave blank if not needed."></textarea>
+                      <div class="form-hint">Shown to students alongside the question.</div>
+                    </div>
+                    <div class="form-group"><label class="form-label">Model Answer</label><input class="form-input" id="outAnswer" type="text"/></div>
+                    <div class="form-group">
+                      <label class="form-label">Expected Reasoning</label>
+                      <textarea class="form-textarea" id="outReasoning" rows="3"></textarea>
+                      <div class="form-hint">AI uses this to evaluate how well students explain their thinking.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card" id="feedbackCard" style="display:none;">
+                  <div class="card-header"><div class="card-title">💬 Step 3 — Feedback <span class="badge badge-blue" style="font-size:.65rem;">optional</span></div><div class="text-sm text-muted">Shapes all future generations</div></div>
+                  <div class="card-body">
+                    <div class="form-group">
+                      <label class="form-label">What did you like or dislike about this question?</label>
+                      <textarea class="form-textarea" id="teacherFeedback" rows="3" placeholder="e.g. 'Too simple — next time require more analytical thinking' or 'Good depth, keep this style'"></textarea>
+                      <div class="form-hint">Stored in Firestore and included in every future generation automatically.</div>
+                    </div>
+                    <div id="saveAlertBox"></div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px;">
+                      <button class="btn btn-ghost" id="skipBtn" onclick="saveQuestion(false)">Save without feedback</button>
+                      <button class="btn btn-primary btn-lg" id="saveFbBtn" onclick="saveQuestion(true)">Save + Add Feedback</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="feedback-panel">
+                <div class="card-header"><div class="card-title">📝 Feedback History</div><span class="badge badge-gray">${history.length}</span></div>
+                <div class="card-body">
+                  ${history.length === 0
+                    ? `<div class="empty-state" style="padding:24px 12px;"><div class="empty-state-icon" style="font-size:1.8rem;">💬</div><div class="empty-state-title">No feedback yet</div><div class="empty-state-sub">Feedback shapes all future AI question generation.</div></div>`
+                    : history.slice().reverse().map((f,i)=>`<div class="feedback-history-item"><div style="font-size:.7rem;color:var(--muted);margin-bottom:3px;">#${history.length-i}</div>${esc(f)}</div>`).join('')}
+                </div>
+                ${history.length > 0 ? `<div style="padding:10px 20px 16px;"><button class="btn btn-ghost btn-sm w-full" onclick="clearHistory()">Clear history</button></div>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    render();
+    initSidebarProfile();
+
+    window.generate = async function() {
+      const subject      = document.getElementById('subject').value.trim();
+      const concept      = document.getElementById('concept').value.trim();
+      const difficulty   = document.getElementById('difficulty').value;
+      const questionType = document.getElementById('questionType').value;
+      if (!concept) { document.getElementById('concept').focus(); return; }
+
+      const btn = document.getElementById('genBtn');
+      btn.disabled = true;
+      document.getElementById('genBtnText').innerHTML = '<div class="spinner" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;border-color:rgba(255,255,255,.3);border-top-color:#fff;"></div> Generating…';
+      document.getElementById('genAlertBox').innerHTML = '';
+
+      try {
+        const result = await generateQuestion({
+          subject: subject || 'General',
+          concept, difficulty, questionType,
+          feedbackHistory: history,
+          weakestConcept: weakest
+        });
+        document.getElementById('outSubject').value  = result.subject           || subject || 'General';
+        document.getElementById('outConcept').value  = result.concept           || concept;
+        document.getElementById('outPrompt').value   = result.prompt            || '';
+        document.getElementById('outMaterial').value = result.supportingMaterial|| '';
+        document.getElementById('outAnswer').value   = result.correctAnswer     || '';
+        document.getElementById('outReasoning').value= result.expectedReasoning || '';
+        document.getElementById('outputCard').style.display   = '';
+        document.getElementById('feedbackCard').style.display = '';
+        document.getElementById('outputCard').scrollIntoView({ behavior:'smooth', block:'start' });
+      } catch(e) {
+        document.getElementById('genAlertBox').innerHTML = `<div class="alert alert-error">Generation failed: ${esc(e.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+        document.getElementById('genBtnText').textContent = '✨ Regenerate';
+      }
+    };
+
+    window.saveQuestion = async function(withFeedback) {
+      const subject           = document.getElementById('outSubject').value.trim();
+      const concept           = document.getElementById('outConcept').value.trim();
+      const prompt            = document.getElementById('outPrompt').value.trim();
+      const supportingMaterial= document.getElementById('outMaterial').value.trim();
+      const correctAnswer     = document.getElementById('outAnswer').value.trim();
+      const expectedReasoning = document.getElementById('outReasoning').value.trim();
+      const alertBox          = document.getElementById('saveAlertBox');
+
+      if (!concept || !prompt || !correctAnswer) {
+        alertBox.innerHTML = '<div class="alert alert-error">Concept, prompt, and model answer are required.</div>';
+        return;
+      }
+      if (withFeedback) {
+        const fb = document.getElementById('teacherFeedback').value.trim();
+        if (fb) { history.push(fb); await saveFeedbackHistory(user.uid, history); }
+      }
+      ['skipBtn','saveFbBtn'].forEach(id => document.getElementById(id).disabled = true);
+      alertBox.innerHTML = '<div class="alert alert-info">Saving…</div>';
+      try {
+        await createQuestion(user.uid, profile.name, {
+          subject, concept, prompt,
+          codeSnippet: supportingMaterial,
+          correctAnswer, expectedReasoning
+        });
+        alertBox.innerHTML = `<div class="alert alert-success">✓ Saved! <a href="teacher-questions.html" style="color:inherit;font-weight:700;">View all →</a></div>`;
+        document.getElementById('outputCard').style.display   = 'none';
+        document.getElementById('feedbackCard').style.display = 'none';
+        document.getElementById('teacherFeedback').value = '';
+        render();
+      } catch(e) {
+        alertBox.innerHTML = `<div class="alert alert-error">Error: ${esc(e.message)}</div>`;
+        ['skipBtn','saveFbBtn'].forEach(id => document.getElementById(id).disabled = false);
+      }
+    };
+
+    window.clearHistory = async function() {
+      if (!confirm('Clear all feedback history?')) return;
+      history = [];
+      await saveFeedbackHistory(user.uid, []);
+      render();
+    };
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  </script>
+</body>
+</html>

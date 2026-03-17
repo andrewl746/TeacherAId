@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Dashboard — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body { background: var(--surface); }
+
+    /* ── Top nav ─────────────────────────────────────────────── */
+    .s-nav {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      box-shadow: var(--shadow-sm);
+    }
+    .s-nav-brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    .s-nav-logo {
+      width:32px; height:32px; border-radius:50%;
+      background:var(--sidebar-bg);
+      display:flex; align-items:center; justify-content:center; overflow:hidden;
+    }
+    .s-nav-logo img { width:22px; height:22px; object-fit:contain; }
+    .s-nav-name { font-family:var(--font-display); font-size:.95rem; color:var(--text); }
+    .s-nav-name span { color:var(--accent); }
+    .s-nav-right { display:flex; align-items:center; gap:10px; }
+    .s-user-chip {
+      display:flex; align-items:center; gap:8px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:999px; padding:4px 14px 4px 4px;
+    }
+    .s-av {
+      width:28px; height:28px; border-radius:50%;
+      background:var(--accent); color:#fff;
+      font-size:.72rem; font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .s-av-name { font-size:.82rem; font-weight:600; color:var(--text); }
+    .s-signout {
+      background:none; border:1px solid var(--border); border-radius:var(--radius-sm);
+      color:var(--muted); font-family:var(--font); font-size:.8rem; font-weight:600;
+      padding:0 12px; height:30px; cursor:pointer; transition:all .15s;
+    }
+    .s-signout:hover { background:var(--surface); color:var(--text); }
+
+    /* ── Page layout ─────────────────────────────────────────── */
+    .s-page { min-height:calc(100vh - 56px); padding: 32px; }
+    .s-inner { max-width:860px; margin:0 auto; }
+
+    /* ── Page header ─────────────────────────────────────────── */
+    .s-page-head { margin-bottom:24px; }
+    .s-page-title {
+      font-family:var(--font-display);
+      font-size:1.5rem;
+      color:var(--text);
+      letter-spacing:-.02em;
+      margin-bottom:3px;
+    }
+    .s-page-sub { font-size:.875rem; color:var(--muted); }
+
+    /* ── Teacher cards ───────────────────────────────────────── */
+    .teacher-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(220px,1fr));
+      gap:14px;
+      margin-bottom:20px;
+    }
+    .teacher-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius-xl);
+      padding:20px 18px 16px;
+      cursor:pointer;
+      text-decoration:none;
+      display:block;
+      transition:all .17s var(--ease);
+      box-shadow:var(--shadow-sm);
+      position:relative;
+      overflow:hidden;
+    }
+    .teacher-card::before {
+      content:'';
+      position:absolute;
+      top:0; left:0; right:0; height:3px;
+      background:var(--accent);
+      transform:scaleX(0);
+      transform-origin:left;
+      transition:transform .2s var(--ease);
+    }
+    .teacher-card:hover {
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-glow), var(--shadow);
+      transform:translateY(-2px);
+    }
+    .teacher-card:hover::before { transform:scaleX(1); }
+    .tc-av {
+      width:42px; height:42px;
+      border-radius:10px;
+      background:var(--accent-soft);
+      color:var(--accent);
+      font-weight:700; font-size:.95rem;
+      display:flex; align-items:center; justify-content:center;
+      margin-bottom:12px;
+    }
+    .tc-name { font-size:.9rem; font-weight:700; color:var(--text); margin-bottom:3px; }
+    .tc-meta { font-size:.75rem; color:var(--muted); }
+    .tc-arrow {
+      position:absolute; top:18px; right:16px;
+      font-size:.85rem; color:var(--muted2);
+      transition:color .15s, transform .15s;
+    }
+    .teacher-card:hover .tc-arrow { color:var(--accent); transform:translateX(3px); }
+
+    /* ── Join class card ─────────────────────────────────────── */
+    .join-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius-xl);
+      padding:20px 22px;
+      box-shadow:var(--shadow-sm);
+    }
+    .join-card-title {
+      font-size:.72rem; font-weight:700; letter-spacing:.08em;
+      text-transform:uppercase; color:var(--muted); margin-bottom:3px;
+    }
+    .join-card-sub { font-size:.82rem; color:var(--muted); margin-bottom:14px; }
+    .join-row { display:flex; gap:10px; }
+    .join-row .form-input { flex:1; }
+
+    /* ── Back button ─────────────────────────────────────────── */
+    .back-btn {
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:.82rem; font-weight:600; color:var(--muted);
+      cursor:pointer; background:none; border:none;
+      font-family:var(--font); padding:0; margin-bottom:20px;
+      transition:color .15s;
+    }
+    .back-btn:hover { color:var(--accent); }
+
+    /* ── Progress bar ────────────────────────────────────────── */
+    .prog-wrap {
+      display:flex; align-items:center; gap:12px; margin-bottom:22px;
+    }
+    .prog-bar-bg {
+      flex:1; height:6px; background:var(--border);
+      border-radius:99px; overflow:hidden;
+    }
+    .prog-bar-fill {
+      height:100%; border-radius:99px; background:var(--accent);
+      transition:width .5s var(--ease);
+    }
+    .prog-label { font-size:.75rem; font-weight:600; color:var(--muted); white-space:nowrap; }
+
+    /* ── Question cards ─────────────────────────────────────── */
+    .q-list { display:flex; flex-direction:column; gap:8px; }
+
+    .q-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      padding:16px 18px;
+      display:flex;
+      align-items:flex-start;
+      gap:14px;
+      cursor:pointer;
+      transition:all .15s var(--ease);
+      box-shadow:var(--shadow-sm);
+      text-decoration:none;
+    }
+    .q-card:hover {
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-glow), var(--shadow);
+      transform:translateX(2px);
+    }
+    .q-card.done {
+      border-left:3px solid var(--success);
+      background:linear-gradient(to right, #f0fdf4 0%, var(--card) 40%);
+    }
+    .q-card.done:hover { border-color:var(--success); box-shadow:0 0 0 3px rgba(25,169,107,.1), var(--shadow); }
+
+    .q-num {
+      width:30px; height:30px; border-radius:50%;
+      background:var(--accent-soft); color:var(--accent);
+      font-size:.75rem; font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; margin-top:1px;
+    }
+    .q-num.done { background:#d1fae5; color:#065f46; }
+
+    .q-body { flex:1; min-width:0; }
+    .q-prompt { font-size:.9rem; font-weight:500; color:var(--text); line-height:1.5; margin-bottom:5px; }
+    .q-tags { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
+    .q-right {
+      flex-shrink:0;
+      display:flex; flex-direction:column; align-items:flex-end; gap:5px;
+    }
+    .q-action { font-size:.75rem; color:var(--muted); }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .s-empty {
+      background:var(--card); border:1px solid var(--border);
+      border-radius:var(--radius-xl); padding:48px 24px;
+      text-align:center; box-shadow:var(--shadow-sm);
+    }
+    .s-empty-icon { font-size:2rem; margin-bottom:10px; opacity:.4; }
+    .s-empty-title { font-weight:700; font-size:.9rem; color:var(--text); margin-bottom:5px; }
+    .s-empty-sub { font-size:.82rem; color:var(--muted); line-height:1.55; }
+
+    /* ── Stats row ───────────────────────────────────────────── */
+    .stats-row {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:12px;
+      margin-bottom:22px;
+    }
+    .stat-mini {
+      background:var(--card); border:1px solid var(--border);
+      border-radius:var(--radius-lg); padding:14px 16px;
+      box-shadow:var(--shadow-sm);
+    }
+    .stat-mini-val { font-size:1.5rem; font-weight:700; color:var(--text); line-height:1; margin-bottom:3px; }
+    .stat-mini-lbl { font-size:.7rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+
+    @keyframes fade-up { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+    .fade-up { animation:fade-up .22s var(--ease) both; }
+  </style>
+</head>
+<body>
+  <nav class="s-nav">
+    <div class="s-nav-brand">
+      <div class="s-nav-logo"><img src="images/logo.png" alt="TeacherAId"/></div>
+      <div class="s-nav-name">Teacher<span>AId</span></div>
+    </div>
+    <div class="s-nav-right">
+      <div class="s-user-chip">
+        <div class="s-av" id="navAv">?</div>
+        <div class="s-av-name" id="navName">Loading…</div>
+      </div>
+      <button class="s-signout" onclick="window.__signOut()">Sign out</button>
+    </div>
+  </nav>
+
+  <div class="s-page">
+    <div class="s-inner" id="mainContent">
+      <div style="display:flex;align-items:center;gap:10px;padding:60px 0;justify-content:center;color:var(--muted);">
+        <div class="spinner spinner-dark" style="width:24px;height:24px;"></div>
+        <span style="font-size:.875rem;">Loading…</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script type="module">
+    import { requireAuth, getCurrentUserProfile, getStudentTeachers, getTeacherQuestions,
+             getStudentSubmissions, logoutUser, enrolStudentWithTeacher, findTeacherByName }
+      from './firebase.js';
+
+    const user    = await requireAuth();
+    const profile = await getCurrentUserProfile();
+    if (profile?.role !== 'student') window.location.href = 'auth-login.html?role=student';
+
+    const name     = profile?.name || user.email;
+    const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('navName').textContent = name;
+    document.getElementById('navAv').textContent   = initials;
+
+    window.__signOut = async () => await logoutUser();
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function setContent(html) {
+      const el = document.getElementById('mainContent');
+      el.innerHTML = html;
+      el.classList.remove('fade-up');
+      void el.offsetWidth;
+      el.classList.add('fade-up');
+    }
+
+    // ── Home: my classes ──────────────────────────────────────
+    window.showHome = async function() {
+      setContent(`
+        <div class="s-page-head">
+          <div class="s-page-title">My Classes</div>
+          <div class="s-page-sub">Select a class to view and answer questions.</div>
+        </div>
+        <div id="teacherGrid" class="teacher-grid">
+          <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:32px 0;color:var(--muted);">
+            <div class="spinner spinner-dark" style="width:20px;height:20px;"></div>
+            <span style="font-size:.82rem;">Loading classes…</span>
+          </div>
+        </div>
+        <div class="join-card">
+          <div class="join-card-title">Join a new class</div>
+          <div class="join-card-sub">Enter your teacher's name exactly as they registered to enrol.</div>
+          <div class="join-row">
+            <input class="form-input" id="teacherNameInput" type="text" placeholder="Teacher's full name"/>
+            <button class="btn btn-primary" onclick="joinTeacher()">Join Class</button>
+          </div>
+          <div id="joinAlert" style="margin-top:10px;"></div>
+        </div>`);
+
+      document.getElementById('teacherNameInput')
+        .addEventListener('keydown', e => { if(e.key==='Enter') joinTeacher(); });
+
+      const teachers = await getStudentTeachers(user.uid);
+      const grid = document.getElementById('teacherGrid');
+
+      if (teachers.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column:1/-1;">
+            <div class="s-empty">
+              <div class="s-empty-icon">🎓</div>
+              <div class="s-empty-title">No classes yet</div>
+              <div class="s-empty-sub">Use the form below to join your first class.</div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = teachers.map(t => {
+        const av = (t.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+        return `
+        <div class="teacher-card" onclick="showTeacher('${t.uid}','${esc(t.name||'Teacher')}')">
+          <div class="tc-arrow">→</div>
+          <div class="tc-av">${av}</div>
+          <div class="tc-name">${esc(t.name||'Teacher')}</div>
+          <div class="tc-meta">Tap to view questions</div>
+        </div>`;
+      }).join('');
+    };
+
+    window.joinTeacher = async function() {
+      const tname   = document.getElementById('teacherNameInput').value.trim();
+      const alertEl = document.getElementById('joinAlert');
+      if (!tname) return;
+      const btn = document.querySelector('.join-row .btn');
+      btn.disabled = true; btn.textContent = 'Joining…';
+      try {
+        const teacher = await findTeacherByName(tname);
+        if (!teacher) {
+          alertEl.innerHTML = '<div class="alert alert-error">Teacher not found. Check the spelling.</div>';
+          return;
+        }
+        await enrolStudentWithTeacher(user.uid, teacher.uid);
+        alertEl.innerHTML = `<div class="alert alert-success">✓ Joined ${esc(teacher.name)}'s class!</div>`;
+        setTimeout(() => window.showHome(), 900);
+      } catch(e) {
+        alertEl.innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
+      } finally {
+        btn.disabled = false; btn.textContent = 'Join Class';
+      }
+    };
+
+    // ── Teacher question list ─────────────────────────────────
+    window.showTeacher = async function(teacherUid, teacherName) {
+      setContent(`
+        <button class="back-btn" onclick="showHome()">← Back to my classes</button>
+        <div class="s-page-head">
+          <div class="s-page-title">${esc(teacherName)}'s Questions</div>
+          <div class="s-page-sub" id="qSubText">Loading…</div>
+        </div>
+        <div class="prog-wrap">
+          <div class="prog-bar-bg"><div class="prog-bar-fill" id="progressBar" style="width:0%"></div></div>
+          <div class="prog-label" id="progLabel">0%</div>
+        </div>
+        <div class="q-list" id="qList">
+          <div style="display:flex;align-items:center;gap:10px;padding:32px 0;justify-content:center;color:var(--muted);">
+            <div class="spinner spinner-dark" style="width:20px;height:20px;"></div>
+            <span style="font-size:.82rem;">Loading questions…</span>
+          </div>
+        </div>`);
+
+      const [questions, mySubs] = await Promise.all([
+        getTeacherQuestions(teacherUid),
+        getStudentSubmissions(user.uid)
+      ]);
+
+      const answeredMap = {};
+      mySubs.forEach(s => { answeredMap[s.questionId] = s; });
+
+      const total    = questions.length;
+      const answered = questions.filter(q => answeredMap[q.id]).length;
+      const pct      = total > 0 ? Math.round(answered / total * 100) : 0;
+      const correct  = questions.filter(q => answeredMap[q.id]?.isCorrect === true).length;
+
+      document.getElementById('qSubText').textContent =
+        `${total} question${total!==1?'s':''} · ${answered} answered · ${total - answered} remaining`;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progLabel').textContent = pct + '%';
+
+      if (total === 0) {
+        document.getElementById('qList').innerHTML = `
+          <div class="s-empty">
+            <div class="s-empty-icon">📝</div>
+            <div class="s-empty-title">No questions yet</div>
+            <div class="s-empty-sub">Your teacher hasn't posted any questions. Check back soon.</div>
+          </div>`;
+        return;
+      }
+
+      // Stats row
+      let statsHtml = `
+        <div class="stats-row" style="margin-bottom:22px;">
+          <div class="stat-mini">
+            <div class="stat-mini-val">${total}</div>
+            <div class="stat-mini-lbl">Total</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val" style="color:var(--success);">${correct}</div>
+            <div class="stat-mini-lbl">Correct</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val" style="color:var(--accent);">${total - answered}</div>
+            <div class="stat-mini-lbl">Remaining</div>
+          </div>
+        </div>`;
+
+      const cardsHtml = questions.filter(q => q.active || answeredMap[q.id]).map((q, i) => {
+        const sub  = answeredMap[q.id];
+        const done = !!sub;
+
+        const statusBadge = done
+          ? (sub.isCorrect === true
+              ? `<span class="badge badge-green" style="display:inline-flex;align-items:center;gap:4px;"><span style="width:5px;height:5px;border-radius:50%;background:#065f46;"></span>Correct</span>`
+              : sub.isCorrect === false
+                ? `<span class="badge badge-red">Incorrect</span>`
+                : `<span class="badge badge-gray">Submitted</span>`)
+          : (q.active
+              ? `<span class="badge badge-blue">Active</span>`
+              : `<span class="badge badge-gray">Available</span>`);
+
+        const tags = [q.subject, q.concept].filter(Boolean);
+
+        return `
+          <div class="q-card ${done?'done':''}"
+               onclick="goToQuestion('${q.id}','${esc(teacherName)}','${teacherUid}')">
+            <div class="q-num ${done?'done':''}">${done ? '✓' : i + 1}</div>
+            <div class="q-body">
+              <div class="q-prompt">${esc(q.prompt)}</div>
+              <div class="q-tags">
+                ${tags.map(t=>`<span class="badge badge-gray" style="font-size:.68rem;">${esc(t)}</span>`).join('')}
+                ${done && sub.misconception
+                  ? `<span class="badge badge-red" style="font-size:.68rem;">⚠ ${esc(sub.misconception)}</span>`
+                  : ''}
+              </div>
+            </div>
+            <div class="q-right">
+              ${statusBadge}
+              <span class="q-action">${done ? 'Review →' : 'Answer →'}</span>
+            </div>
+          </div>`;
+      }).join('');
+
+      document.getElementById('qList').innerHTML = statsHtml + `<div class="q-list">${cardsHtml}</div>`;
+    };
+
+    window.goToQuestion = function(questionId, teacherName, teacherUid) {
+      sessionStorage.setItem('activeQuestionId',  questionId);
+      sessionStorage.setItem('activeTeacherName', teacherName);
+      sessionStorage.setItem('activeTeacherUid',  teacherUid);
+      window.location.href = 'student-questions.html';
+    };
+
+    // If returning from a question, go straight back to that teacher's list
+    const urlParams = new URLSearchParams(location.search);
+    const returnTeacherUid  = urlParams.get('teacher');
+    const returnTeacherName = urlParams.get('name');
+    if (returnTeacherUid && returnTeacherName) {
+      window.showTeacher(returnTeacherUid, decodeURIComponent(returnTeacherName));
+    } else {
+      window.showHome();
+    }
+  </script>
+</body>
+</html>

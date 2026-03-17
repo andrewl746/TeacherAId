@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Loading — TeacherAId</title>
+  <link rel="icon" type="image/png" href="images/logoresized.png">
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    .loading-logo{width:64px;height:64px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:20px;box-shadow:0 0 0 10px rgba(53,51,205,.12),0 0 0 22px rgba(53,51,205,.05);}
+    .loading-logo img{width:46px;height:46px;object-fit:contain;}
+    .loading-brand{font-family:'Playfair Display',Georgia,serif;font-size:1.3rem;color:#fff;margin-bottom:28px;}
+    .loading-brand span{color:#9b99f0;}
+  </style>
+</head>
+<body>
+  <div class="loading-page">
+    <div class="loading-logo"><img src="images/logo.png" alt="TeacherAId"/></div>
+    <div class="loading-brand">Teacher<span>AId</span></div>
+    <div class="loading-spinner-lg"></div>
+    <div class="loading-text" id="loadingText">Loading…</div>
+  </div>
+  <script>
+    const p = new URLSearchParams(location.search);
+    const to = p.get('to') || 'index.html';
+    const delay = parseInt(p.get('delay') || '1500');
+    const msg = p.get('msg') || 'Loading…';
+    document.getElementById('loadingText').textContent = msg;
+    setTimeout(() => window.location.href = to, delay);
+  </script>
+</body>
+</html>
