@@ -4,7 +4,6 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Question — TeacherAId</title>
-  <link rel="icon" type="image/png" href="images/logoresized.png">
   <link rel="stylesheet" href="style.css"/>
   <style>
     .sq-layout { min-height:100vh; background:var(--sidebar-bg); display:flex; align-items:center; justify-content:center; padding:24px 16px; }
@@ -193,13 +192,14 @@
       try {
         // Classify with Claude
         const result = await classifySubmission({
-          subject:          question.subject || 'Programming',
-          concept:          question.concept || '',
-          prompt:           question.prompt,
-          codeSnippet:      question.codeSnippet || '',
-          correctAnswer:    question.correctAnswer,
-          studentAnswer:    answer,
-          studentReasoning: reasoning
+          subject:           question.subject || 'General',
+          concept:           question.concept || '',
+          prompt:            question.prompt,
+          codeSnippet:       question.codeSnippet || '',
+          correctAnswer:     question.correctAnswer,
+          expectedReasoning: question.expectedReasoning || '',
+          studentAnswer:     answer,
+          studentReasoning:  reasoning
         });
 
         // Save to Firestore
