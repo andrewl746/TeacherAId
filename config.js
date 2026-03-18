@@ -29,24 +29,31 @@ function parseClaudeJSON(text) {
 async function classifySubmission({ subject, concept, prompt, codeSnippet, correctAnswer, studentAnswer, studentReasoning }) {
   const text = await callClaude(`You are an expert educator. Evaluate this student's response.
 
-Subject: ${subject || 'Programming'}
-Concept: ${concept || 'general'}
-Question: ${prompt}
-${codeSnippet ? `Code:\n${codeSnippet}\n` : ''}
-Correct Answer: ${correctAnswer}
-Student Answer: ${studentAnswer}
-Student Reasoning: ${studentReasoning}
-
-Analyze the student's understanding and respond ONLY with valid JSON (no markdown, no backticks):
-{
-  "isCorrect": true or false,
-  "misconception": "Short label for the main misconception if wrong, or null if correct",
-  "analysis": "1-2 sentences explaining what the student got right or wrong and why",
-  "reasoningPattern": "Describe the student's thinking pattern — what mental model are they using?",
-  "strength": "One thing the student demonstrated understanding of, or null",
-  "confidence": 0.0 to 1.0,
-  "evidence": ["quote or paraphrase from student reasoning that supports your classification"]
-}`);
+  Subject: ${subject || 'General'}
+  Concept: ${concept || 'general'}
+  Question: ${prompt}
+  ${codeSnippet ? `Supporting Material:\n${codeSnippet}\n` : ''}
+  ${expectedReasoning ? `Expected Reasoning: ${expectedReasoning}\n` : ''}
+  Correct Answer: ${correctAnswer}
+  Student Answer: ${studentAnswer}
+  Student Reasoning: ${studentReasoning}
+  
+  Important rules:
+  - If the student's answer is correct AND their reasoning is mathematically or logically valid, set isCorrect to true and misconception to null — even if they phrased it differently from the expected approach.
+  - Only flag a misconception if the reasoning contains a genuine conceptual error, not just a different but valid method.
+  - Do not invent misconceptions for correct reasoning.
+  
+  Analyze the student's understanding and respond ONLY with valid JSON (no markdown, no backticks):
+  {
+    "isCorrect": true or false,
+    "misconception": "Short label for the main misconception if wrong, or null if correct",
+    "analysis": "1-2 sentences explaining what the student got right or wrong and why",
+    "reasoningPattern": "Describe the student's thinking pattern — what mental model are they using?",
+    "strength": "One thing the student demonstrated understanding of, or null",
+    "confidence": 0.0 to 1.0,
+    "evidence": ["quote or paraphrase from student reasoning that supports your classification"]
+  }`);
+  
   return parseClaudeJSON(text);
 }
 
